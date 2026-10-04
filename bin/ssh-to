@@ -7,6 +7,7 @@ BIN_TARGET="${XDG_DATA_HOME:-$HOME/.local}/bin/ssh-to"
 usage() {
     cat << 'USAGE'
 Usage:
+  ssh-to [select] [ssh-opts]    Interactively select host via fzf and connect
   ssh-to link <host...>         Create symlink(s) in machines directory
   ssh-to unlink <host...>       Remove symlink(s)
   ssh-to list                   List active host shortcuts
@@ -27,17 +28,40 @@ if [[ "${INVOKED_NAME}" != "ssh-to" && "${INVOKED_NAME}" != "ssh-to.sh" ]]; then
     exec ssh "${INVOKED_NAME}" "$@"
 fi
 
-# 2. ssh-to 管理コマンドとして実行された場合
+# 2. 引数なしで実行された場合は対話型選択（select）にフォールバック
 if [[ $# -lt 1 ]]; then
-    usage
+    SUBCOMMAND="select"
+else
+    SUBCOMMAND="$1"
+    shift
 fi
-
-SUBCOMMAND="$1"
-shift
 
 mkdir -p "${MACHINES_DIR}"
 
 case "${SUBCOMMAND}" in
+    select|s)
+        if ! command -v fzf >/dev/null 2>&1; then
+            echo "[-] Error: 'fzf' is required for interactive selection." >&2
+            exit 1
+        fi
+
+        # 登録済みホスト一覧を取得
+        if ! raw_hosts=$(find "${MACHINES_DIR}" -mindepth 1 -maxdepth 1 -type l -printf "%f\n" 2>/dev/null); then
+            raw_hosts=$(ls -1 "${MACHINES_DIR}" 2>/dev/null || true)
+        fi
+
+        if [[ -z "${raw_hosts}" ]]; then
+            echo "[!] No shortcuts registered in ${MACHINES_DIR}. Run 'ssh-to sync' or 'ssh-to link <host>' first." >&2
+            exit 1
+        fi
+
+        # fzf で選択（引数に残ったオプションはそのまま ssh に渡す）
+        selected_host=$(echo "${raw_hosts}" | sort | fzf --prompt="ssh-to > " --height=40% --reverse)
+        if [[ -n "${selected_host}" ]]; then
+            exec ssh "${selected_host}" "$@"
+        fi
+        ;;
+
     link|add)
         if [[ $# -lt 1 ]]; then
             echo "[-] Error: Specify at least one host name." >&2
@@ -80,7 +104,6 @@ case "${SUBCOMMAND}" in
             exit 1
         fi
         echo "[*] Parsing hosts from ${SSH_CONFIG}..."
-        # Extract hostnames excluding wildcards
         hosts=$(awk '/^[Hh][Oo][Ss][Tt] / {for(i=2;i<=NF;i++) if ($i !~ /[*?]/) print $i}' "${SSH_CONFIG}" | sort -u)
         for host in ${hosts}; do
             ln -sf "${BIN_TARGET}" "${MACHINES_DIR}/${host}"
