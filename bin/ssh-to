@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MACHINES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/ssh-to/machines"
+BIN_TARGET="${XDG_DATA_HOME:-$HOME/.local}/bin/ssh-to"
+
+usage() {
+    cat << 'USAGE'
+Usage:
+  ssh-to link <host...>         Create symlink(s) in machines directory
+  ssh-to unlink <host...>       Remove symlink(s)
+  ssh-to list                   List active host shortcuts
+  ssh-to sync                   Create links for all Host entries in ~/.ssh/config
+  ssh-to path                   Print the directory to add to your PATH
+  <host> [ssh-options]          Direct execution via symlink
+
+Setup:
+  Add the machines directory to your PATH (e.g. in ~/.zshrc or export.zsh):
+    export PATH="$HOME/.local/share/ssh-to/machines:$PATH"
+USAGE
+    exit 0
+}
+
+# 1. シンボリックリンク経由で直接ホスト名として実行された場合
+INVOKED_NAME="$(basename "$0")"
+if [[ "${INVOKED_NAME}" != "ssh-to" && "${INVOKED_NAME}" != "ssh-to.sh" ]]; then
+    exec ssh "${INVOKED_NAME}" "$@"
+fi
+
+# 2. ssh-to 管理コマンドとして実行された場合
+if [[ $# -lt 1 ]]; then
+    usage
+fi
+
+SUBCOMMAND="$1"
+shift
+
+mkdir -p "${MACHINES_DIR}"
+
+case "${SUBCOMMAND}" in
+    link|add)
+        if [[ $# -lt 1 ]]; then
+            echo "[-] Error: Specify at least one host name." >&2
+            exit 1
+        fi
+        for host in "$@"; do
+            target="${MACHINES_DIR}/${host}"
+            ln -sf "${BIN_TARGET}" "${target}"
+            echo "[+] Linked: ${host} -> ${BIN_TARGET}"
+        done
+        ;;
+
+    unlink|rm|remove)
+        if [[ $# -lt 1 ]]; then
+            echo "[-] Error: Specify at least one host name." >&2
+            exit 1
+        fi
+        for host in "$@"; do
+            target="${MACHINES_DIR}/${host}"
+            if [[ -L "${target}" || -f "${target}" ]]; then
+                rm -f "${target}"
+                echo "[-] Removed: ${host}"
+            else
+                echo "[!] Shortcut not found: ${host}" >&2
+            fi
+        done
+        ;;
+
+    list|ls)
+        echo "=== ssh-to registered machines (${MACHINES_DIR}) ==="
+        if ! find "${MACHINES_DIR}" -mindepth 1 -maxdepth 1 -type l -printf "  %f\n" 2>/dev/null; then
+            ls -1 "${MACHINES_DIR}" 2>/dev/null | sed 's/^/  /' || true
+        fi
+        ;;
+
+    sync)
+        SSH_CONFIG="${HOME}/.ssh/config"
+        if [[ ! -f "${SSH_CONFIG}" ]]; then
+            echo "[-] Error: ${SSH_CONFIG} not found." >&2
+            exit 1
+        fi
+        echo "[*] Parsing hosts from ${SSH_CONFIG}..."
+        # Extract hostnames excluding wildcards
+        hosts=$(awk '/^[Hh][Oo][Ss][Tt] / {for(i=2;i<=NF;i++) if ($i !~ /[*?]/) print $i}' "${SSH_CONFIG}" | sort -u)
+        for host in ${hosts}; do
+            ln -sf "${BIN_TARGET}" "${MACHINES_DIR}/${host}"
+            echo "[+] Synced: ${host}"
+        done
+        ;;
+
+    path)
+        echo "${MACHINES_DIR}"
+        ;;
+
+    -h|--help|help)
+        usage
+        ;;
+
+    *)
+        echo "[-] Unknown command: ${SUBCOMMAND}" >&2
+        usage
+        ;;
+esac

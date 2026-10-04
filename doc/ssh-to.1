@@ -1,0 +1,45 @@
+.TH SSH-TO 1 "September 2026" "Version 1.0.0" "User Commands"
+.SH NAME
+ssh-to \- symlink-driven transparent SSH shortcut manager
+.SH SYNOPSIS
+.B ssh-to
+[\fBlink\fR|\fBunlink\fR|\fBlist\fR|\fBsync\fR|\fBpath\fR] [\fIOPTIONS\fR]
+.br
+.B <host>
+[\fISSH-OPTIONS\fR]
+.SH DESCRIPTION
+.B ssh-to
+eliminates repetitive \fBssh\fR invocations by dynamically determining the target
+hostname from \fB$0\fR (the invoking symlink basename). It manages an isolated directory
+of host symlinks and allows transparent execution directly from the shell prompt.
+.SH SUBCOMMANDS
+.TP
+.BI link \ host...
+Create one or more host shortcut symlinks pointing to \fBssh-to\fR.
+.TP
+.BI unlink \ host...
+Remove host shortcuts.
+.TP
+.B list
+List all configured host shortcuts.
+.TP
+.B sync
+Scan \fI~/.ssh/config\fR for Host entries and automatically generate shortcuts.
+.TP
+.B path
+Print the machines directory path intended for \fB$PATH\fR inclusion.
+.SH EXAMPLES
+Register servers manually:
+.IP
+.nf
+ssh-to link dev-server prod-bastion
+prod-bastion -p 2222
+.fi
+.PP
+Automatically sync all hosts defined in your SSH config:
+.IP
+.nf
+ssh-to sync
+.fi
+.SH AUTHOR
+Crafted for sovereign POSIX environments.
