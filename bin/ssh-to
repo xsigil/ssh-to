@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MACHINES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/ssh-to/machines"
-BIN_TARGET="${XDG_DATA_HOME:-$HOME/.local}/bin/ssh-to"
+BIN_TARGET="$(command -v ssh-to || echo "/usr/bin/ssh-to")"
 
 usage() {
     cat << 'USAGE'
